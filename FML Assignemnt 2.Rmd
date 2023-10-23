@@ -1,0 +1,357 @@
+---
+title: "FML Assignment 2"
+author: "Praveen Reddy"
+date: "2023-10-22"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+#Importing the dataset
+universal_bank_dataset<- read.csv("C:/Users/Praveen/Downloads/UniversalBank.csv")
+
+#Displaying first 6 rows of the dataset
+head(universal_bank_dataset)
+```
+```{r}
+#Structure of the dataset
+str(universal_bank_dataset)
+#Dataset has 5000 rows and 14 variables
+```
+```{r}
+#Finding missing values in the dataset columnwise
+missing_values <- is.na(universal_bank_dataset)
+missing_count <- colSums(missing_values)
+missing_count
+```
+```{r}
+#Finding the summary of the dataset
+summary(universal_bank_dataset)
+```
+```{r}
+#Data Cleaning as per requiremnts
+
+#Removing ID and Zip code
+universal_bank_dataset <- universal_bank_dataset[, !(names(universal_bank_dataset) %in% c("ID", "ZIP.Code"))]
+
+#Checking the structure of the dataset whether columns has been eliminated or not
+str(universal_bank_dataset)
+
+```
+```{r}
+#class of Education
+class(universal_bank_dataset$Education)
+
+#Converting class of Education
+universal_bank_dataset$Education <- as.factor(universal_bank_dataset$Education)
+
+#Checking the class of Education 
+class(universal_bank_dataset$Education)
+
+```
+```{r}
+#Transforming Education variable categories to dummy variables
+library(dplyr)
+
+universal_bank_dataset <- universal_bank_dataset %>%
+  mutate(Education_1 = as.integer(Education == 1),
+         Education_2 = as.integer(Education == 2),
+         Education_3 = as.integer(Education == 3))
+```
+```{r}
+#Checking the structure of the dataset to check whether dummy variables are created or not
+str(universal_bank_dataset)
+#Removing Education Variable and Personal Loan Variable
+```
+```{r}
+#partitioning the dataset 60%(training set) and 40%(validation set)
+uni_training.index <-sample(row.names(universal_bank_dataset),0.6*dim(universal_bank_dataset)[1])
+uni_validation.index <-setdiff(row.names(universal_bank_dataset),uni_training.index)
+training_universal_bank<-universal_bank_dataset[uni_training.index,]
+training_universal_bank_dataset<-training_universal_bank
+training_universal_bank <- training_universal_bank[, !(names(training_universal_bank) %in% c("Education","Personal.Loan"))]
+
+validation_universal_bank<-universal_bank_dataset[uni_validation.index,]
+validation_universal_bank <- validation_universal_bank[, !(names(validation_universal_bank) %in% c("Education","Personal.Loan"))]
+
+```
+
+```{r}
+#We totally have 5000 observations in the datset
+#Checking traning set division(60%)
+nrow(training_universal_bank)
+#Checking validation set division(40%)
+nrow(validation_universal_bank)
+```
+```{r}
+#Normalizing the data
+#install.packages("caret")
+library(caret)
+normalized_transformations <- preProcess(training_universal_bank, method = c("center", "scale"))
+#normalizing the training data
+normalized_training_universal_bank<-predict(normalized_transformations,training_universal_bank)
+head(normalized_training_universal_bank) #Normalized training data
+#normalizing the validation data
+normalized_validation_universal_bank<-predict(normalized_transformations,validation_universal_bank)
+#Displaying first 6 rows of normalized validation data
+head(normalized_validation_universal_bank)
+```
+```{r}
+#Question-1
+single_customer <- data.frame(
+  Age = 40,
+  Experience = 10,
+  Income = 84,
+  Family = 2,
+  CCAvg = 2,
+  CD.Account = 0,
+  Online = 1,
+  CreditCard = 1,
+  Education_1 = 0,
+  Education_2 = 1,
+  Education_3 = 0,
+  Mortgage = 0,
+  Securities.Account = 0
+)
+single_customer
+```
+```{r}
+#New customer
+test_customer_norm<-predict(normalized_transformations,single_customer)
+test_customer_norm
+```
+```{r}
+#Applying KNN
+library(class)
+training_predictors <-normalized_training_universal_bank
+training_labels <- normalized_training_universal_bank[,7]
+
+validation_predictors <-normalized_validation_universal_bank
+validation_labels <- normalized_validation_universal_bank[,7]
+
+# Check dimensions before applying K-NN
+print(dim(training_predictors))
+print(dim(test_customer_norm))
+
+# Check the first few rows of the datasets
+head(training_predictors)
+head(test_customer_norm)
+
+# Perform K-NN
+predicted_labels <- knn(training_predictors, test_customer_norm, cl = training_labels, k = 1)
+
+# Check the predicted labels
+print(predicted_labels)
+# Sample continuous predicted values
+predicted_values <- c(-0.344885185781267, 2.89854916325886)
+
+# Define the threshold
+threshold <- 0.5
+
+# Create categorical labels based on the threshold
+predicted_labels <- ifelse(predicted_values >= threshold, 1, 0)
+
+# Display the predicted labels
+print(predicted_labels)
+
+#if we apply thresold value 0.5 it is clear that the class is 0.So the customer would be classified with loan rejection(0).
+
+```
+```{r}
+#Question-2
+# Load the necessary libraries
+library(caret)
+
+# Define the control function for cross-validation
+ctrl <- trainControl(method = "cv", number = 10)  # 10-fold cross-validation
+
+# Define a range of k values to consider
+k_values <- c(1, 3, 5, 7, 9, 11, 13,15)  # Example k values
+
+# Create a grid of k values to search over
+grid <- expand.grid(k = k_values)
+
+training_universal_bank_dataset$Personal.Loan <- as.factor(training_universal_bank_dataset$Personal.Loan)
+
+# Perform grid search with cross-validation
+model <- train(`Personal.Loan` ~ ., data = training_universal_bank_dataset, method = "knn", trControl = ctrl, tuneGrid = grid)
+
+# Display the results, including the optimal k value
+print(model)
+
+# Print the accuracy for each k value
+accuracy_values <- model$results$Accuracy
+cat("Accuracy for different k values:\n")
+print(accuracy_values)
+
+
+```
+```{r}
+best_k <- model$bestTune[[1]]
+best_k#k=3
+#Question-2 Final Answer based on results
+#k=3 achieves highest accuracy
+#So based on the results, k=3 seems to be the optimal choice as it provides
+#a good balance between accuracy and Kappa, suggesting it is a suitable k value
+#that balances between overfitting and ignoring the predictor information in K-NN model.
+
+```
+
+```{r}
+#Question-3
+library(caret)
+
+# Assuming you have your training and validation data ready
+training_predictors <- normalized_training_universal_bank
+training_labels <- as.factor(normalized_training_universal_bank[, 7])
+validation_predictors <- normalized_validation_universal_bank
+validation_labels <- as.factor(normalized_validation_universal_bank[, 7])
+
+# Perform K-NN with the best k
+predicted_labels <- knn(training_predictors, validation_predictors, cl = training_labels, k = best_k)
+
+
+# Create a confusion matrix
+confusion_matrix <- confusionMatrix(predicted_labels, validation_labels)
+
+# Print the confusion matrix
+print(confusion_matrix)
+
+
+```
+```{r}
+#Question-4
+# Assuming you have your best_k, training_predictors, and training_labels ready
+
+# Create a data frame with the customer's information
+new_customer <- data.frame(
+  Age = 40,
+  Experience = 10,
+  Income = 84,
+  Family = 2,
+  CCAvg = 2,
+  Education_1 = 0,
+  Education_2 = 1,
+  Education_3 = 0,
+  Mortgage = 0,
+  Securities_Account = 0,
+  CD_Account = 0,
+  Online = 1,
+  CreditCard = 1
+)
+
+# Perform K-NN with the best k-value
+predicted_class <- knn(training_predictors, new_customer, cl = training_labels, k = best_k)
+
+# Convert the predicted class levels to 0 and 1
+predicted_class <- ifelse(predicted_class == levels(predicted_class)[1], 0, 1)
+
+# The predicted_class variable now contains the class as 0 or 1 for the new customer
+print(predicted_class)
+
+#Customer loan acceptance failed 
+
+```
+```{r}
+#Question-5
+library(caret)
+library(class)
+
+# Repartition the entire data into training, validation, and test sets
+set.seed(123)  # For reproducibility
+indices <- createDataPartition(y = universal_bank_dataset$Personal.Loan, p = 0.5, list = FALSE)
+training_data <- universal_bank_dataset[indices, ]  # 50% for training
+remaining_data <- universal_bank_dataset[-indices, ]  # 50% remaining
+indices2 <- createDataPartition(y = remaining_data$Personal.Loan, p = 0.6, list = FALSE)
+validation_data <- remaining_data[indices2, ]  # 30% for validation
+test_data <- remaining_data[-indices2, ]  # 20% for testing
+
+# Prepare predictors and labels for training, validation, and test sets
+training_predictors <- training_data[, -7]  # Excluding the target variable (Loan_Status)
+training_labels <- as.factor(training_data$Personal.Loan)
+validation_predictors <- validation_data[, -7]
+validation_labels <- as.factor(validation_data$Personal.Loan)
+test_predictors <- test_data[, -7]
+test_labels <- as.factor(test_data$Personal.Loan)
+
+# Apply k-NN with the best k-value on training and validation sets
+predicted_labels_validation <- knn(training_predictors, validation_predictors, cl = training_labels, k = best_k)
+
+# Get confusion matrices for training, validation, and test sets
+confusion_matrix_training <- confusionMatrix(training_labels, knn(training_predictors, training_predictors, cl = training_labels, k = best_k))
+confusion_matrix_validation <- confusionMatrix(validation_labels, predicted_labels_validation)
+
+# Aligning the  factor levels
+test_labels <- factor(test_labels, levels = levels(training_labels))
+
+# Calculate the confusion matrix for the test set
+confusion_matrix_test <- confusionMatrix(test_labels, knn(training_predictors, test_predictors, cl = training_labels, k = best_k))
+
+
+# Compare the confusion matrices
+print("Confusion Matrix for Training Set:")
+print(confusion_matrix_training)
+print("Confusion Matrix for Validation Set:")
+print(confusion_matrix_validation)
+print("Confusion Matrix for Test Set:")
+print(confusion_matrix_test)
+
+```
+```{r}
+#Comparing 3 confusion matrixes i.e, Training set, Validation set and test set
+
+# Training Set:
+# 
+# Accuracy: 0.9616
+# Kappa: 0.7349
+# Sensitivity (0): 0.9653
+# Specificity (1): 0.9080
+
+# Validation Set:
+# 
+# Accuracy: 0.916
+# Kappa: 0.4312
+# Sensitivity (0): 0.9387
+# Specificity (1): 0.5876
+
+# Test Set:
+# 
+# Accuracy: 0.919
+# Kappa: 0.4904
+# Sensitivity (0): 0.9337
+# Specificity (1): 0.7077
+
+# Notes:
+# 1.The training set exhibited the highest accuracy (96.16%) and Kappa (0.7349)
+#indicating a well-fit model.
+# 2.However, the training set showed a higher sensitivity (true positive rate)
+#for class 0 (96.53%) than class 1 (90.80%), suggesting that it's better at predicting the majority class.
+# 3.In contrast, the validation set achieved slightly lower accuracy (91.60%) 
+#and Kappa (0.4312). It had a high sensitivity for class 0 (93.87%) but a notably lower specificity for class 1 (58.76%).
+# 4.The test set displayed an accuracy of 91.90% and a Kappa of 0.4904, demonstrating
+#robust model generalization. Its sensitivity for class 0 was 93.37%, and specificity for class 1 was 70.77%.
+# 5.The data's class imbalance could be influencing the model's prediction accuracy,
+#with an overemphasis on the majority class.
+# 6.Notably, there are significant differences in model performance between 
+#the training, validation, and test sets, suggesting potential areas for further investigation and model refinement.
+# 7.These variations may stem from differences in data distribution and 
+#characteristics between the training and validation sets, highlighting the 
+#need for continued model evaluation and adaptation.
+
+```
+
+
+
+
+
